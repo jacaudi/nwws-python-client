@@ -13,7 +13,6 @@ import asyncio
 import slixmpp
 import re
 from datetime import datetime, timezone
-from xml.dom import minidom
 
 def sigint_handler(signal, frame):
     print('Caught Ctrl+C. Exiting.')
@@ -27,6 +26,13 @@ def sigpipe_handler(signal, frame):
 signal.signal(signal.SIGINT, sigint_handler)
 signal.signal(signal.SIGPIPE, sigpipe_handler)
 
+# Define NWWS payload format
+class NwwsPayload(slixmpp.ElementBase):
+    plugin_attrib = "nwws"
+    name = "x"
+    namespace = "nwws-oi"
+    interfaces = {"cccc","ttaaii","issue","awipsid","id"}
+
 class MUCBot(slixmpp.ClientXMPP):
 
     """
@@ -38,6 +44,9 @@ class MUCBot(slixmpp.ClientXMPP):
 
         self.room = room
         self.nick = nick
+
+        # Register custom stanza handler
+        slixmpp.xmlstream.register_stanza_plugin(slixmpp.Message,NwwsPayload)
 
         # The session_start event will be triggered when
         # the bot establishes its connection with the server
@@ -87,16 +96,14 @@ class MUCBot(slixmpp.ClientXMPP):
         """
         try:
             print('INFO\t message stanza rcvd from nwws-oi saying... ' + msg['body'])
-            xmldoc = minidom.parseString(str(msg))
-            itemlist = xmldoc.getElementsByTagName('x')
-            ttaaii = itemlist[0].attributes['ttaaii'].value.lower()
-            cccc = itemlist[0].attributes['cccc'].value.lower()
-            awipsid = itemlist[0].attributes['awipsid'].value.lower()
-            id = itemlist[0].attributes['id'].value
-            content = itemlist[0].firstChild.nodeValue
+            ttaaii = msg["nwws"]["ttaaii"].lower()
+            cccc = msg["nwws"]["cccc"].lower()
+            awipsid = msg["nwws"]["awipsid"].lower()
+            nwwsid = msg["nwws"]["id"]
+            content = msg["nwws"].xml.text
             if awipsid:
                 dayhourmin = datetime.now(timezone.utc).strftime("%d%H%M")
-                filename = cccc + '_' + ttaaii + '-' + awipsid + '.' + dayhourmin + '_' + id + '.txt'
+                filename = cccc + '_' + ttaaii + '-' + awipsid + '.' + dayhourmin + '_' + nwwsid + '.txt'
                 print("DEBUG\t Writing " + filename, file=sys.stderr)
                 if not os.path.exists(config['archivedir'] + '/' + cccc):
                     os.makedirs(config['archivedir'] + '/' + cccc)
